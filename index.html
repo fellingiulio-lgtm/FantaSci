@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Fantasy Sci</title>
+<style>
+:root{color-scheme:light;--bg:#fff;--card:#eef5ff;--acc:#1e5fd8;--fg:#0b2a5b;--mut:#5b6b85;--line:#cfe0fb;--bad:#c81e1e;--ok:#15803d;--live:#dc2626}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--fg);padding-bottom:calc(72px + env(safe-area-inset-bottom,0px))}
+header{background:var(--acc);color:#fff;padding:14px 16px;padding-top:calc(14px + env(safe-area-inset-top,0px));position:sticky;top:0;z-index:5}
+header h1{margin:0;font-size:18px}header small{opacity:.9;font-size:13px}
+main{padding:12px;max-width:640px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
+h2{font-size:16px;margin:0 0 8px;color:var(--acc)}
+button{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:9px 13px;font-size:14px;margin:4px 4px 0 0;cursor:pointer}
+button.sec{background:#fff;color:var(--acc);border:1px solid var(--acc)}
+button:disabled{opacity:.35}
+input,select,textarea{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--fg);font-size:15px;margin:4px 0}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.sk{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+.av{width:44px;height:44px;border-radius:50%;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+.inf{flex:1;min-width:0}
+.mut{color:var(--mut);font-size:13px}
+details{font-size:13px;margin-top:4px}summary{color:var(--acc);cursor:pointer}
+.badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--acc);color:#fff;white-space:nowrap}
+.badge.live{background:var(--live)}.badge.fine{background:var(--mut)}
+table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
+th{color:var(--acc);font-size:12px}
+.me{background:#dbeafe;font-weight:700}
+.ok{color:var(--ok);font-weight:700}
+.msg{background:#fee2e2;color:var(--bad);border-radius:10px;padding:10px;margin:10px 0}
+.info{background:#dcfce7;color:var(--ok);border-radius:10px;padding:10px;margin:10px 0}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:none;justify-content:space-around;padding:6px 0 calc(6px + env(safe-area-inset-bottom,0px));z-index:5}
+nav button{background:none;color:var(--mut);margin:0;padding:6px 4px;font-size:12px;flex:1;border-radius:0}
+nav button.on{color:var(--acc);font-weight:700}
+</style></head><body>
+<header><h1 id=ttl>Fantasy Sci</h1><small id=sub>Coppa del Mondo di sci</small></header>
+<main id=app>Caricamento…</main>
+<nav id=tabs></nav>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.js"></script>
+<script>
+/* ===== CONFIGURAZIONE: incolla qui i dati del tuo progetto Supabase (Settings > API) ===== */
+const SUPA_URL='https://TUO-PROGETTO.supabase.co';
+const SUPA_KEY='LA-TUA-CHIAVE-ANON-PUBBLICA';
+/* ======================================================================================== */
+
+const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
+const T={top:'TOP',semi:'SEMI-TOP',pippe:'PIPPE'};
+const G={M:'Uomini',F:'Donne',mista:'Mista'};
+const SL={attesa:'In arrivo',live:'In diretta',fine:'Conclusa'};
+const SO={live:0,attesa:1,fine:2};
+const RULES={budget:1000,maxPlayers:10,maxMembers:10,mult:{top:1,semi:1.2,pippe:1.5},podium:{top:5,semi:10,pippe:15},win:10,malus:{RIT:-10,SQ:-20,DNS:-5},predHit:5,predExact:5};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function slug(s){return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');}
+function idOf(n,g){return slug(n+'-'+g);}
+const FL=c=>String.fromCodePoint(...[...(c||'')].map(x=>127397+x.charCodeAt(0)));
+const ini=n=>{const w=n.split(' ');return (w[0][0]+w[w.length-1][0]).toUpperCase();};
+const pts=p=>p<=25?50-2*(p-1):0;
+const lines=t=>t.split('\n').map(s=>s.trim()).filter(Boolean);
+const hasRes=r=>Array.isArray(r.order)&&r.order.length>0;
+const mkPool=rows=>rows.map(([name,g,nat,spec,tier,price])=>({id:idOf(name,g),name,g,nat,spec,tier,price}));
+const ok=r=>{if(r&&r.error) throw new Error(r.error.message); return r;};
+const LS={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
+
+/* ===== Dati di partenza: listone, gare reali, notizie ===== */
+const SEED=[
+['Marco Odermatt','M','CH','GS SG SL','top',300],['Lucas Pinheiro Braathen','M','BR','GS SL','top',250],['Loïc Meillard','M','CH','GS SL','semi',130],['Marco Schwarz','M','AT','SL GS SG','top',210],['Henrik Kristoffersen','M','NO','SL GS','top',200],['Franjo von Allmen','M','CH','SG DH SL','top',200],['Aleksander Aamodt Kilde','M','NO','SG DH','semi',140],['Alex Vinatzer','M','IT','SL GS','semi',100],['Manuel Feller','M','AT','SL GS','semi',90],
+['Federica Brignone','F','IT','GS SG','top',300],['Mikaela Shiffrin','F','US','SL GS','top',290],['Sofia Goggia','F','IT','SG DH','top',230],['Lara Gut-Behrami','F','CH','SG DH SL','top',220],['Paula Moltzan','F','US','GS','semi',170],['Lara Colturi','F','AL','GS','semi',120],['Emma Aicher','F','DE','GS SL','semi',140],['Sara Hector','F','SE','SL GS','semi',110],['Camille Rast','F','CH','GS SL','semi',110],['Alice Robinson','F','NZ','GS SL','semi',100],['Petra Vlhová','F','SK','SL GS','semi',160],['Wendy Holdener','F','CH','SL GS','semi',100],
+['Asja Zenere','F','IT','GS SL','pippe',70],['Franziska Gritsch','F','AT','GS SL','pippe',70],['Nina O\'Brien','F','US','GS SL','pippe',60],['Lara Della Mea','F','IT','GS','pippe',50],['Zrinka Ljutić','F','HR','SL GS','pippe',50],['Julia Scheib','F','AT','GS','pippe',60],['Maryna Gąsienica-Daniel','F','PL','SL GS','pippe',50]
+];
+const R=(name,d,g,status,rows,dnf=[])=>({name,d,g,status,order:rows.map(([n,t])=>({id:idOf(n,g),n,t})),dnf:dnf.map(([n,c])=>({id:idOf(n,g),n,c}))});
+const RACE_SEED=[
+R('Sölden GS F (25 ott 2025)','2025-10-25','F','fine',[['Julia Scheib','2:16.51'],['Paula Moltzan','2:17.09'],['Lara Gut-Behrami','2:17.62'],['Mikaela Shiffrin','2:17.93'],['Thea Louise Stjernesund','2:18.04'],['Nina O\'Brien','2:18.26'],['Lara Colturi','2:18.27'],['Alice Robinson','2:18.40'],['Sara Hector','2:18.44'],['Zrinka Ljutić','2:18.55'],['Valerie Grenier','2:18.57'],['Katie Hensien','2:18.62'],['A J Hurt','2:18.65'],['Lena Dürr','2:18.75'],['Camille Rast','2:18.76']],[['Sofia Goggia','RIT']]),
+R('Sölden GS F (24 ott 2026)','2026-10-24','F','fine',[['Paula Moltzan','2:14.82'],['Lara Colturi','2:14.83'],['Emma Aicher','2:15.34'],['Sara Hector','2:15.45'],['Asja Zenere','2:15.54'],['Camille Rast','2:15.63'],['Mikaela Shiffrin','2:15.65'],['Alice Robinson','2:15.83'],['Franziska Gritsch','2:15.94'],['Maryna Gąsienica-Daniel','2:15.94'],['Zrinka Ljutić','2:16.17'],['Estelle Alphand','2:16.32'],['A J Hurt','2:16.43'],['Elisabeth Bocock','2:16.44'],['Hilma Løvblom','2:16.47'],['Nina O\'Brien','2:16.51'],['Mina Fürst Holtmann','2:16.51'],['Lara Della Mea','2:16.55'],['Hanna Aronsson Elfman','2:16.59'],['Wendy Holdener','2:16.74'],['Thea Louise Stjernesund','2:16.74'],['Lena Dürr','2:16.79'],['Petra Vlhová','2:16.90'],['Simone Wild','2:16.92'],['Stefanie Grob','2:16.97']],[['Julia Scheib','RIT']]),
+R('Sölden GS M (25 ott 2026), podio','2026-10-25','M','fine',[['Lucas Pinheiro Braathen',''],['Loïc Meillard',''],['Marco Odermatt','']]),
+R('Levi Slalom F (14 nov 2026)','2026-11-14','F','attesa',[]),
+R('Levi Slalom M (15 nov 2026)','2026-11-15','M','attesa',[]),
+R('Gurgl Slalom F (21 nov 2026)','2026-11-21','F','attesa',[]),
+R('Gurgl Slalom M (22 nov 2026)','2026-11-22','M','attesa',[])
+];
+const DEMO_TEAMS={me:['marco-odermatt-m','mikaela-shiffrin-f','loic-meillard-m','alex-vinatzer-m'],amico:['lucas-pinheiro-braathen-m','paula-moltzan-f','camille-rast-f','wendy-holdener-f']};
+const NEWS=[{d:'2026-10-22',t:'Odermatt è indicato come il favorito della Coppa maschile; Shiffrin è tra le principali rivali per quella femminile.'},{d:'2026-10-24',t:'Al via la stagione 2026/27 con il gigante di Sölden: Moltzan vince quello femminile, Braathen quello maschile.'},{d:'',t:'Lindsey Vonn è inserita nella squadra USA, ma il suo rientro dopo l’infortunio resta incerto.'},{d:'',t:'Mondiali di sci alpino a Crans-Montana dall’1 al 14 febbraio 2027.'},{d:'',t:'Finali di Coppa a Sun Valley (USA), dal 22 al 25 marzo 2027.'}];
+
+/* ===== Stato ===== */
+let uid='',email='',code=null,league=null,members=[],races=[],P={},msg='',info='',tab='gare',subCode=null,chan=null;
+const myName=()=>LS.get('fs_name')||'Tu';
+const me=()=>members.find(m=>m.uid===uid);
+const isOwner=()=>!!league&&league.owner===uid;
+const news=()=>league?.news||NEWS;
+const spent=m=>(m?.players||[]).reduce((a,id)=>a+(P[id]?.price||0),0);
+const SO2=(a,b)=>(SO[a.status||'attesa']??1)-(SO[b.status||'attesa']??1)||String(b.d||'').localeCompare(String(a.d||''));
+
+/* ===== Punteggi ===== */
+function skierPts(id,r){
+  if(!hasRes(r)) return null;
+  const i=r.order.findIndex(x=>x.id===id);
+  if(i>=0){const p=i+1, tier=P[id]?.tier||'pippe'; return Math.round(pts(p)*RULES.mult[tier]+(p<=3?RULES.podium[tier]:0)+(p===1?RULES.win:0));}
+  const d=(r.dnf||[]).find(x=>x.id===id);
+  if(d) return RULES.malus[d.c]??RULES.malus.RIT;
+  return 0;
+}
+const teamPts=(m,r)=>hasRes(r)?(m.players||[]).reduce((a,id)=>a+(skierPts(id,r)||0),0):0;
+function predPts(m,r){
+  if(!hasRes(r)) return 0;
+  const pr=(m.pred||{})[r.id]||[], top5=r.order.slice(0,5).map(x=>x.id); let t=0;
+  pr.forEach((id,i)=>{const p=top5.indexOf(id); if(p>=0){t+=RULES.predHit; if(p===i) t+=RULES.predExact;}});
+  return t;
+}
+const racePts=(m,r)=>Math.round(teamPts(m,r)+predPts(m,r));
+const total=m=>races.reduce((s,r)=>s+racePts(m,r),0);
+const skierTotal=id=>races.reduce((s,r)=>s+(skierPts(id,r)||0),0);
+
+/* ===== Dati ===== */
+async function loadLeague(){
+  if(!uid||!code){league=null;members=[];races=[];render();return;}
+  const {data:L}=await sb.from('leagues').select('*').eq('code',code).maybeSingle();
+  if(!L){LS.del('fs_code');code=null;league=null;members=[];races=[];render();return;}
+  league=L;
+  P=Object.fromEntries((L.pool||[]).map(p=>[p.id,p]));
+  const {data:M}=await sb.from('members').select('*').eq('league_code',code);
+  members=(M||[]).map(m=>({id:m.id,uid:m.user_id,name:m.name,players:m.players||[],pred:m.pred||{}}));
+  const {data:R2}=await sb.from('races').select('*').eq('league_code',code);
+  races=(R2||[]).map(r=>({id:r.id,name:r.name,d:r.d,g:r.g,status:r.status,order:r.result||[],dnf:r.dnf||[]})).sort(SO2);
+  if(subCode!==code){subCode=code; subscribe();}
+  render();
+}
+function subscribe(){
+  if(chan) sb.removeChannel(chan);
+  const f=`league_code=eq.${code}`;
+  chan=sb.channel('lega-'+code)
+    .on('postgres_changes',{event:'*',schema:'public',table:'races',filter:f},()=>loadLeague())
+    .on('postgres_changes',{event:'*',schema:'public',table:'members',filter:f},()=>loadLeague())
+    .on('postgres_changes',{event:'*',schema:'public',table:'leagues',filter:`code=eq.${code}`},()=>loadLeague())
+    .subscribe();
+}
+function setCode(C){code=C; LS.set('fs_code',C);}
+
+/* ===== Interfaccia ===== */
+function render(){
+  const d={}; document.querySelectorAll('input[id],textarea[id],select[id]').forEach(e=>d[e.id]=e.value);
+  let h=(msg?`<div class=msg>${esc(msg)}</div>`:'')+(info?`<div class=info>${esc(info)}</div>`:''), nav='';
+  if(!uid){
+    $('ttl').textContent='Fantasy Sci'; $('sub').textContent='Accedi per giocare';
+    h+=loginView();
+  } else if(!code){
+    $('ttl').textContent='Fantasy Sci'; $('sub').textContent='Ciao, '+(email||'giocatore');
+    h+=home();
+  } else if(!league){
+    $('ttl').textContent='Caricamento…'; $('sub').textContent='';
+    h+=`<div class=card>Caricamento della lega…</div>`;
+  } else {
+    $('ttl').textContent=league.name;
+    $('sub').textContent=`Codice ${code} · ${members.length}/${RULES.maxMembers} partecipanti`;
+    const tabs=[['gare','Gare'],['squadra','Squadra'],['classifica','Classifica'],['notizie','Notizie'],...(isOwner()?[['admin','Admin']]:[])];
+    nav=tabs.map(([k,l])=>`<button class="${tab===k?'on':''}" data-tab="${k}">${l}</button>`).join('');
+    h+=content();
+  }
+  $('app').innerHTML=h;
+  $('tabs').innerHTML=nav;
+  $('tabs').style.display=(uid&&code&&league)?'flex':'none';
+  for(const k in d){const e=$(k); if(e) e.value=d[k];}
+}
+
+function loginView(){
+  return `<div class=card><h2>Accedi</h2><p class=mut>Scrivi la tua e-mail: ti mandiamo un link, senza password.</p><input id=em type=email placeholder="La tua e-mail"><button data-act=mail>Mandami il link</button></div>
+<div class=card><h2>Oppure</h2><button class=sec data-act=google>Accedi con Google</button><p class=mut>L’accesso con Apple lo aggiungiamo in un secondo momento.</p></div>`;
+}
+
+function home(){
+  return `<div class=card><h2>Gioca subito</h2><p class=mut>Entra in una lega di prova con squadre e gare vere della stagione.</p><button data-act=demo>Prova ora</button></div>
+<div class=card><h2>Crea una lega</h2><input id=ln placeholder="Nome della lega"><button data-act=create>Crea lega</button></div>
+<div class=card><h2>Entra con un codice</h2><input id=jc placeholder="Codice" maxlength=12><button class=sec data-act=join>Entra</button></div>
+<p style="text-align:center"><button class=sec data-act=logout>Esci dall’account</button></p>`;
+}
+
+function content(){
+  let h;
+  if(tab==='gare') h=gareTab();
+  else if(tab==='squadra') h=squadraTab();
+  else if(tab==='classifica') h=classificaTab();
+  else if(tab==='notizie') h=notizieTab();
+  else h=isOwner()?adminTab():'';
+  return h+`<p style="text-align:center"><button class=sec data-act=leave>Cambia lega</button></p>`;
+}
+
+const RULES_TXT=`<div class=card><h2>Come si fa punteggio</h2>
+<div class=mut>Punti per posto: 1° 50, 2° 48 … fino al 25° (2 punti). Moltiplicatore per fascia: TOP ×1, SEMI-TOP ×1,2, PIPPE ×1,5.</div>
+<div class=mut><b>Bonus:</b> vittoria +10; podio TOP +5, SEMI-TOP +10, PIPPE +15.</div>
+<div class=mut><b>Malus:</b> ritiro −10, squalifica −20, non partito −5.</div>
+<div class=mut><b>Previsione top 5:</b> +5 per ogni atleta indovinato nei primi 5, +5 in più se è nel posto esatto.</div></div>`;
+
+function joinCard(){
+  return `<div class=card><h2>Entra nella lega</h2><p class=mut>Non risulti ancora tra i partecipanti.</p><button data-act=joinhere>Entra</button></div>`;
+}
+
+function gareTab(){
+  const M=me();
+  if(!races.length) return '<div class=card>Nessuna gara ancora: l’admin le aggiunge nella sezione Admin.</div>';
+  return RULES_TXT+races.map(r=>{
+    const st=r.status||'attesa';
+    let body='';
+    if(hasRes(r)){
+      const mine=id=>M&&(M.players||[]).includes(id);
+      body=`<table><tr><th>#</th><th>Atleta</th><th>Tempo</th><th>Punti</th></tr>`+
+        r.order.map((x,i)=>`<tr class="${mine(x.id)?'me':''}"><td>${i+1}</td><td>${FL(P[x.id]?.nat)} ${esc(x.n)}</td><td>${esc(x.t||'')}</td><td>${skierPts(x.id,r)}</td></tr>`).join('')+
+        (r.dnf||[]).map(x=>`<tr class="${mine(x.id)?'me':''}"><td>—</td><td>${esc(x.n)}</td><td>${esc(x.c)}</td><td>${RULES.malus[x.c]??RULES.malus.RIT}</td></tr>`).join('')+`</table>`;
+      if(M) body+=`<div class=mut style="margin-top:8px">La tua squadra: <b>${teamPts(M,r)}</b> · Previsione: <b>${predPts(M,r)}</b> · Totale gara: <b>${racePts(M,r)}</b></div>`;
+    } else if(M){
+      const opts=Object.values(P).filter(p=>r.g==='mista'||p.g===r.g).sort((a,b)=>a.name.localeCompare(b.name));
+      const cur=(M.pred||{})[r.id]||[];
+      body=`<div class=mut style="margin-bottom:6px">Prevedi i primi 5 all’arrivo</div>`+
+        [0,1,2,3,4].map(i=>`<select id="pk-${esc(r.id)}-${i}"><option value="">${i+1}° posto</option>${opts.map(p=>`<option value="${esc(p.id)}" ${cur[i]===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select>`).join('')+
+        `<button data-act=pred data-race="${esc(r.id)}">Salva previsione</button>`;
+    } else body='<span class=mut>In arrivo</span>';
+    return `<div class=card><div class=row><b>${esc(r.name)}</b><span class="badge ${st}">${SL[st]||st}</span></div><div class=mut>${G[r.g]||''} · ${esc(r.d||'')}</div>${body}</div>`;
+  }).join('');
+}
+
+function squadraTab(){
+  const M=me(); if(!M) return joinCard();
+  const left=RULES.budget-spent(M), n=(M.players||[]).length, canSell=!races.some(hasRes);
+  let h=`<div class=card><div class=row><b>Crediti: ${left} / ${RULES.budget}</b><span class=mut>${n}/${RULES.maxPlayers} atleti</span></div></div>`;
+  h+=`<div class=card><h2>La tua squadra</h2>`+
+    (n?(M.players).map(id=>{const s=P[id]; return s?`<div class=row><span>${FL(s.nat)} ${esc(s.name)} <span class=mut>${T[s.tier]} · ${s.price} · punti ${skierTotal(id)}</span></span>${canSell?`<button class=sec data-act=sell data-id="${esc(id)}">Vendi</button>`:''}</div>`:'';}).join(''):'<p class=mut>Nessun atleta ancora: scegline dal listone qui sotto.</p>')+
+    `<div style="margin-top:10px"><input id=nmx value="${esc(M.name)}" placeholder="Il tuo nome"><button class=sec data-act=savename>Salva nome</button></div></div>`;
+  if(!(league.pool||[]).length) return h+'<div class=card>Il listone non è ancora stato caricato dall’admin.</div>';
+  h+=`<div class=mut style="margin:4px 2px">Prezzi consigliati: con l’asta saranno quelli di partenza e potranno cambiare.</div>`;
+  h+=Object.keys(T).map(t=>{
+    const list=(league.pool||[]).filter(p=>p.tier===t).sort((a,b)=>b.price-a.price);
+    if(!list.length) return `<div class=card><h2>${T[t]}</h2><p class=mut>Nessun atleta in questa fascia.</p></div>`;
+    return `<div class=card><h2>${T[t]}</h2>`+list.map(s=>{
+      const own=(M.players||[]).includes(s.id), can=!own&&n<RULES.maxPlayers&&s.price<=left;
+      const last=races.filter(hasRes);
+      return `<div class=sk><div class=av>${ini(s.name)}</div><div class=inf><b>${esc(s.name)}</b> ${FL(s.nat)}<div class=mut>${esc(s.nat)} · ${esc(s.spec)} · ${G[s.g]}</div><div class=mut>Consigliato ${s.price} · Punti ${skierTotal(s.id)}</div>
+<details><summary>Ultime gare</summary>${last.length?last.map(r=>{const i=r.order.findIndex(x=>x.id===s.id); const v=i>=0?`${i+1}° (${skierPts(s.id,r)} pt)`:(r.dnf||[]).some(x=>x.id===s.id)?'ritirato':'non partecipa'; return `<div>${esc(r.name)}: ${v}</div>`}).join(''):'<div>Nessuna gara ancora</div>'}</details></div>
+${own?'<span class=ok>✓</span>':`<button data-act=buy data-id="${esc(s.id)}" ${can?'':'disabled'}>Compra</button>`}</div>`;
+    }).join('')+'</div>';
+  }).join('');
+  return h;
+}
+
+function classificaTab(){
+  const rows=members.map(m=>({m,t:total(m)})).sort((a,b)=>b.t-a.t);
+  if(!rows.length) return '<div class=card>Nessun partecipante ancora.</div>';
+  return `<div class=card><table><tr><th>#</th><th>Partecipante</th><th>Atleti</th><th>Punti</th></tr>${rows.map((r,i)=>`<tr class="${r.m.uid===uid?'me':''}"><td>${i+1}</td><td>${esc(r.m.name)}</td><td>${(r.m.players||[]).length}</td><td><b>${r.t}</b></td></tr>`).join('')}</table><p class=mut>Punti aggiornati ogni volta che l’admin salva una gara.</p></div>`;
+}
+
+function notizieTab(){
+  return news().slice().reverse().map(n=>`<div class=card>${n.d?`<div class=mut>${esc(n.d)}</div>`:''}<div>${esc(n.t)}</div>${n.l&&n.l.startsWith('https://')?`<a href="${esc(n.l)}" target=_blank rel=noopener style="color:var(--acc)">Leggi</a>`:''}</div>`).join('')+
+    `<p class=mut>Le notizie le pubblica l’admin dalla sezione Admin.</p>`;
+}
+
+function adminTab(){
+  const pt=(league.pool||[]).map(p=>`${p.name};${p.g};${p.nat||''};${p.spec||''};${p.tier};${p.price}`).join('\n');
+  let h=`<div class=card><h2>Listone</h2><p class=mut>Una riga per atleta: Nome;M o F;Nazione (es. IT);Specialità (es. GS SL);fascia (top, semi o pippe);prezzo consigliato</p><textarea id=pool rows=10>${esc(pt)}</textarea><button data-act=savepool>Salva listone</button></div>`;
+  h+=`<div class=card><h2>Aggiorna notizie</h2><p class=mut>Una notizia per riga: data (AAAA-MM-GG) | testo | link facoltativo</p><textarea id=nb rows=4></textarea><button data-act=newsbatch>Aggiorna notizie</button></div>`;
+  h+=`<div class=card><h2>Nuova gara</h2><input id=rn placeholder="Es. Gigante Sölden M"><select id=rg><option value=M>Uomini</option><option value=F>Donne</option><option value=mista>Mista</option></select><button data-act=addrace>Aggiungi gara</button></div>`;
+  h+=races.map(r=>{
+    const t=(r.order||[]).map(x=>`${x.n};${x.t||''}`).join('\n');
+    const dn=(r.dnf||[]).map(x=>`${x.n};${x.c}`).join('\n');
+    return `<div class=card><div class=row><b>${esc(r.name)}</b><select id="st-${esc(r.id)}">${Object.entries(SL).map(([k,l])=>`<option value=${k} ${(r.status||'attesa')===k?'selected':''}>${l}</option>`).join('')}</select></div>
+<div class=mut>Un atleta per riga, in ordine d’arrivo: Nome;tempo</div><textarea id="res-${esc(r.id)}" rows=6>${esc(t)}</textarea>
+<div class=mut>Ritirati o squalificati: Nome;RIT, SQ o DNS</div><textarea id="dnf-${esc(r.id)}" rows=2>${esc(dn)}</textarea>
+<button data-act=results data-race="${esc(r.id)}">Calcola e carica risultato</button></div>`;
+  }).join('');
+  return h;
+}
+
+function parsePool(t){
+  return lines(t).map(l=>{
+    const [name,g,nat,spec,tier,price]=l.split(';').map(x=>(x||'').trim());
+    const gg=(g||'M').toUpperCase();
+    return {id:idOf(name,gg),name,g:gg,nat:(nat||'').toUpperCase(),spec:spec||'',tier:(tier||'').toLowerCase(),price:parseInt(price,10)||0};
+  }).filter(p=>p.name&&T[p.tier]&&['M','F'].includes(p.g)&&p.price>0);
+}
+function randCode(){const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';return Array.from({length:6},()=>A[Math.floor(Math.random()*A.length)]).join('');}
+
+async function saveMe(patch){
+  const M=me();
+  if(!M){ ok(await sb.from('members').insert({league_code:code,user_id:uid,name:myName(),players:[],pred:{},...patch})); }
+  else ok(await sb.from('members').update(patch).eq('id',M.id));
+}
+
+async function enterLeague(C){
+  if(!/^[A-Z0-9]{4,12}$/.test(C)) throw new Error('Codice non valido');
+  const {data:L}=await sb.from('leagues').select('code').eq('code',C).maybeSingle();
+  if(!L) throw new Error('Lega non trovata');
+  const {data:mine}=await sb.from('members').select('id').eq('league_code',C).eq('user_id',uid).maybeSingle();
+  if(!mine){
+    const {count}=await sb.from('members').select('id',{count:'exact',head:true}).eq('league_code',C);
+    if((count||0)>=RULES.maxMembers) throw new Error('Lega piena (10 partecipanti)');
+    ok(await sb.from('members').insert({league_code:C,user_id:uid,name:myName(),players:[],pred:{}}));
+  }
+  setCode(C); await loadLeague();
+}
+
+async function newLeague(name,demo){
+  const C=randCode();
+  ok(await sb.from('leagues').insert({code:C,name,owner:uid,pool:mkPool(SEED),news:NEWS}));
+  ok(await sb.from('races').insert(RACE_SEED.map(x=>({league_code:C,id:slug(x.name),name:x.name,d:x.d,g:x.g,status:x.status,result:x.order,dnf:x.dnf}))));
+  const rows=[{league_code:C,user_id:uid,name:myName(),players:demo?DEMO_TEAMS.me:[],pred:{}}];
+  if(demo) rows.push({league_code:C,user_id:null,name:'Amico demo',players:DEMO_TEAMS.amico,pred:{}});
+  ok(await sb.from('members').insert(rows));
+  setCode(C); await loadLeague();
+}
+
+async function act(a,ds){
+  msg=''; info='';
+  if(a==='mail'){
+    const e=$('em').value.trim(); if(!e) throw new Error('Scrivi la tua e-mail');
+    ok(await sb.auth.signInWithOtp({email:e,options:{emailRedirectTo:location.origin+location.pathname}}));
+    info='Ti abbiamo mandato il link. Aprilo dalla posta su questo dispositivo.'; return;
+  }
+  if(a==='google'){ ok(await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}})); return; }
+  if(a==='logout'){ await sb.auth.signOut(); LS.del('fs_code'); return; }
+  if(a==='demo'){ await newLeague('Lega di prova',true); return; }
+  if(a==='create'){ await newLeague($('ln').value.trim()||'La mia lega',false); return; }
+  if(a==='join'){ await enterLeague($('jc').value.trim().toUpperCase()); return; }
+  if(a==='joinhere'){ await enterLeague(code); return; }
+  if(a==='leave'){ LS.del('fs_code'); code=null; league=null; members=[]; races=[]; render(); return; }
+  if(a==='savename'){ const n=$('nmx').value.trim()||'Tu'; LS.set('fs_name',n); await saveMe({name:n}); return; }
+  if(a==='buy'){
+    const M=me(); if(!M) throw new Error('Entra nella lega prima');
+    const s=P[ds.id]; if(!s) throw new Error('Atleta non trovato');
+    if((M.players||[]).length>=RULES.maxPlayers) throw new Error('Massimo 10 atleti');
+    if(spent(M)+s.price>RULES.budget) throw new Error('Crediti insufficienti');
+    await saveMe({players:[...(M.players||[]),s.id]}); return;
+  }
+  if(a==='sell'){
+    const M=me(); if(!M) return;
+    if(races.some(hasRes)) throw new Error('Non puoi vendere dopo la prima gara');
+    await saveMe({players:M.players.filter(x=>x!==ds.id)}); return;
+  }
+  if(a==='pred'){
+    const M=me(); if(!M) throw new Error('Entra nella lega prima');
+    const r=ds.race;
+    const sel=[0,1,2,3,4].map(i=>$(`pk-${r}-${i}`)?.value).filter(Boolean);
+    if(sel.length<5) throw new Error('Scegli 5 atleti');
+    if(new Set(sel).size<5) throw new Error('Scegli 5 atleti diversi');
+    await saveMe({pred:{...(M.pred||{}),[r]:sel}}); return;
+  }
+  if(!isOwner()) return;
+  if(a==='savepool'){
+    const pool=parsePool($('pool').value);
+    if(!pool.length) throw new Error('Listone vuoto o formato errato');
+    if(new Set(pool.map(p=>p.id)).size!==pool.length) throw new Error('Atleti duplicati');
+    ok(await sb.from('leagues').update({pool}).eq('code',code)); return;
+  }
+  if(a==='newsbatch'){
+    const items=lines($('nb').value).map(l=>{const [d,t,k]=l.split('|').map(x=>(x||'').trim()); return {d:d||'',t:t||'',l:k||''};}).filter(x=>x.t);
+    if(!items.length) throw new Error('Nessuna notizia valida');
+    ok(await sb.from('leagues').update({news:[...news(),...items]}).eq('code',code));
+    $('nb').value=''; return;
+  }
+  if(a==='addrace'){
+    const n=$('rn').value.trim(); if(!n) throw new Error('Scrivi il nome della gara');
+    const id=slug(n);
+    if(races.some(r=>r.id===id)) throw new Error('Gara già presente');
+    ok(await sb.from('races').insert({league_code:code,id,name:n,d:new Date().toISOString().slice(0,10),g:$('rg').value,status:'attesa',result:[],dnf:[]}));
+    $('rn').value=''; return;
+  }
+  if(a==='results'){
+    const r=races.find(x=>x.id===ds.race); if(!r) throw new Error('Gara non trovata');
+    const status=$('st-'+r.id).value;
+    const order=lines($('res-'+r.id).value).map(l=>{const [n,t]=l.split(';').map(x=>(x||'').trim()); return {id:idOf(n,r.g),n,t:t||''};});
+    if(new Set(order.map(x=>x.id)).size!==order.length) throw new Error('Atleta inserito due volte');
+    const dnf=lines($('dnf-'+r.id).value).map(l=>{const [n,c]=l.split(';').map(x=>(x||'').trim()); return {id:idOf(n,r.g),n,c:(c||'RIT').toUpperCase()};});
+    ok(await sb.from('races').update({result:order,dnf,status}).eq('league_code',code).eq('id',r.id));
+    info='Risultato caricato: punti ricalcolati per tutti.';
+    return;
+  }
+}
+
+document.addEventListener('click',async e=>{
+  const t=e.target.closest('[data-tab]');
+  if(t){ tab=t.dataset.tab; render(); return; }
+  const b=e.target.closest('[data-act]');
+  if(!b||b.disabled) return;
+  try{ await act(b.dataset.act,b.dataset); }
+  catch(err){ msg=err.message||String(err); }
+  if(uid&&code) await loadLeague(); else render();
+});
+
+/* ===== Avvio ===== */
+sb.auth.onAuthStateChange(async (_ev,session)=>{
+  uid=session?.user?.id||''; email=session?.user?.email||'';
+  code=LS.get('fs_code');
+  await loadLeague();
+});
+render();
+</script></body></html>
