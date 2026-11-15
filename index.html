@@ -38,10 +38,10 @@ nav button.on{color:var(--acc);font-weight:700}
 <nav id=tabs></nav>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.0/dist/umd/supabase.js"></script>
 <script>
-/* ===== CONFIGURAZIONE: incolla qui i dati del tuo progetto Supabase (Settings > API) ===== */
+/* ===== CONFIGURAZIONE ===== */
 const SUPA_URL='https://mpxigchpsrxabvyqlxwg.supabase.co';
 const SUPA_KEY='sb_publishable_Vg0JU9HVGCj2o_mMBDmJ_A_fK_rKzHu';
-/* ======================================================================================== */
+/* ========================= */
 
 const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 const T={top:'TOP',semi:'SEMI-TOP',pippe:'PIPPE'};
@@ -62,7 +62,7 @@ const mkPool=rows=>rows.map(([name,g,nat,spec,tier,price])=>({id:idOf(name,g),na
 const ok=r=>{if(r&&r.error) throw new Error(r.error.message); return r;};
 const LS={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
 
-/* ===== Dati di partenza: listone, gare reali, notizie ===== */
+/* ===== Dati di partenza ===== */
 const SEED=[
 ['Marco Odermatt','M','CH','GS SG SL','top',300],['Lucas Pinheiro Braathen','M','BR','GS SL','top',250],['Loïc Meillard','M','CH','GS SL','semi',130],['Marco Schwarz','M','AT','SL GS SG','top',210],['Henrik Kristoffersen','M','NO','SL GS','top',200],['Franjo von Allmen','M','CH','SG DH SL','top',200],['Aleksander Aamodt Kilde','M','NO','SG DH','semi',140],['Alex Vinatzer','M','IT','SL GS','semi',100],['Manuel Feller','M','AT','SL GS','semi',90],
 ['Federica Brignone','F','IT','GS SG','top',300],['Mikaela Shiffrin','F','US','SL GS','top',290],['Sofia Goggia','F','IT','SG DH','top',230],['Lara Gut-Behrami','F','CH','SG DH SL','top',220],['Paula Moltzan','F','US','GS','semi',170],['Lara Colturi','F','AL','GS','semi',120],['Emma Aicher','F','DE','GS SL','semi',140],['Sara Hector','F','SE','SL GS','semi',110],['Camille Rast','F','CH','GS SL','semi',110],['Alice Robinson','F','NZ','GS SL','semi',100],['Petra Vlhová','F','SK','SL GS','semi',160],['Wendy Holdener','F','CH','SL GS','semi',100],
@@ -162,8 +162,10 @@ function render(){
 }
 
 function loginView(){
-  return `<div class=card><h2>Accedi</h2><p class=mut>Scrivi la tua e-mail: ti mandiamo un link, senza password.</p><input id=em type=email placeholder="La tua e-mail"><button data-act=mail>Mandami il link</button></div>
-<div class=card><h2>Oppure</h2><button class=sec data-act=google>Accedi con Google</button><p class=mut>L’accesso con Apple lo aggiungiamo in un secondo momento.</p></div>`;
+  return `<div class=card><h2>Accedi</h2><p class=mut>Prima volta? Scrivi e-mail e password, poi tocca <b>Crea account</b>. Poi, le volte successive, tocca <b>Accedi</b>.</p>
+<input id=em type=email placeholder="La tua e-mail" autocomplete=username>
+<input id=pw type=password placeholder="Password (almeno 6 caratteri)" autocomplete=current-password>
+<button data-act=login>Accedi</button> <button class=sec data-act=signup>Crea account</button></div>`;
 }
 
 function home(){
@@ -306,12 +308,18 @@ async function newLeague(name,demo){
 
 async function act(a,ds){
   msg=''; info='';
-  if(a==='mail'){
-    const e=$('em').value.trim(); if(!e) throw new Error('Scrivi la tua e-mail');
-    ok(await sb.auth.signInWithOtp({email:e,options:{emailRedirectTo:location.origin+location.pathname}}));
-    info='Ti abbiamo mandato il link. Aprilo dalla posta su questo dispositivo.'; return;
+  if(a==='login'){
+    const e=$('em').value.trim(), p=$('pw').value;
+    if(!e||!p) throw new Error('Scrivi e-mail e password');
+    ok(await sb.auth.signInWithPassword({email:e,password:p})); return;
   }
-  if(a==='google'){ ok(await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}})); return; }
+  if(a==='signup'){
+    const e=$('em').value.trim(), p=$('pw').value;
+    if(!e||p.length<6) throw new Error('Scrivi e-mail e una password di almeno 6 caratteri');
+    const r=ok(await sb.auth.signUp({email:e,password:p}));
+    if(!r.data.session) info='Account creato. Ora tocca Accedi.';
+    return;
+  }
   if(a==='logout'){ await sb.auth.signOut(); LS.del('fs_code'); return; }
   if(a==='demo'){ await newLeague('Lega di prova',true); return; }
   if(a==='create'){ await newLeague($('ln').value.trim()||'La mia lega',false); return; }
