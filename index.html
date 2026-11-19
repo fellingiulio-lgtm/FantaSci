@@ -10,11 +10,12 @@ header{background:var(--acc);color:#fff;padding:14px 16px;padding-top:calc(14px 
 header h1{margin:0;font-size:18px}header small{opacity:.9;font-size:13px}
 main{padding:12px;max-width:640px;margin:0 auto}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
-h2{font-size:16px;margin:0 0 8px;color:var(--acc)}
+h2{font-size:16px;margin:12px 0 8px;color:var(--acc)}
 button{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:9px 13px;font-size:14px;margin:4px 4px 0 0;cursor:pointer}
 button.sec{background:#fff;color:var(--acc);border:1px solid var(--acc)}
 button:disabled{opacity:.35}
 input,select,textarea{width:100%;padding:10px;border-radius:10px;border:1px solid var(--line);background:#fff;color:var(--fg);font-size:15px;margin:4px 0}
+.seg{display:flex;gap:6px;margin:8px 0}.seg button{flex:1;margin:0}
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
 .sk{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
 .av{width:44px;height:44px;border-radius:50%;background:var(--acc);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
@@ -22,7 +23,7 @@ input,select,textarea{width:100%;padding:10px;border-radius:10px;border:1px soli
 .mut{color:var(--mut);font-size:13px}
 details{font-size:13px;margin-top:4px}summary{color:var(--acc);cursor:pointer}
 .badge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;background:var(--acc);color:#fff;white-space:nowrap}
-.badge.live{background:var(--live)}.badge.fine{background:var(--mut)}
+.badge.fine{background:var(--mut)}.badge.da{background:#b45309}.badge.live{background:var(--live)}
 table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:7px 4px;border-bottom:1px solid var(--line);text-align:left}
 th{color:var(--acc);font-size:12px}
 .me{background:#dbeafe;font-weight:700}
@@ -46,8 +47,8 @@ const SUPA_KEY='sb_publishable_Vg0JU9HVGCj2o_mMBDmJ_A_fK_rKzHu';
 const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 const T={top:'TOP',semi:'SEMI-TOP',pippe:'PIPPE'};
 const G={M:'Uomini',F:'Donne',mista:'Mista'};
-const SL={attesa:'In arrivo',live:'In diretta',fine:'Conclusa'};
-const SO={live:0,attesa:1,fine:2};
+const SL={attesa:'In arrivo',live:'In diretta',fine:'Conclusa',da:'Da inserire'};
+const SO={live:0,attesa:1,da:1,fine:2};
 const RULES={budget:1000,maxPlayers:10,maxMembers:10,mult:{top:1,semi:1.2,pippe:1.5},podium:{top:5,semi:10,pippe:15},win:10,malus:{RIT:-10,SQ:-20,DNS:-5},predHit:5,predExact:5};
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -61,6 +62,8 @@ const hasRes=r=>Array.isArray(r.order)&&r.order.length>0;
 const mkPool=rows=>rows.map(([name,g,nat,spec,tier,price])=>({id:idOf(name,g),name,g,nat,spec,tier,price}));
 const ok=r=>{if(r&&r.error) throw new Error(r.error.message); return r;};
 const LS={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}},del:k=>{try{localStorage.removeItem(k)}catch(e){}}};
+const todayStr=()=>{const x=new Date();return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');};
+const addDays=(s,n)=>{const x=new Date(s+'T12:00:00');x.setDate(x.getDate()+n);return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');};
 
 /* ===== Dati di partenza ===== */
 const SEED=[
@@ -82,7 +85,7 @@ const DEMO_TEAMS={me:['marco-odermatt-m','mikaela-shiffrin-f','loic-meillard-m',
 const NEWS=[{d:'2026-10-22',t:'Odermatt è indicato come il favorito della Coppa maschile; Shiffrin è tra le principali rivali per quella femminile.'},{d:'2026-10-24',t:'Al via la stagione 2026/27 con il gigante di Sölden: Moltzan vince quello femminile, Braathen quello maschile.'},{d:'',t:'Lindsey Vonn è inserita nella squadra USA, ma il suo rientro dopo l’infortunio resta incerto.'},{d:'',t:'Mondiali di sci alpino a Crans-Montana dall’1 al 14 febbraio 2027.'},{d:'',t:'Finali di Coppa a Sun Valley (USA), dal 22 al 25 marzo 2027.'}];
 
 /* ===== Stato ===== */
-let uid='',email='',code=null,league=null,members=[],races=[],P={},msg='',info='',tab='gare',subCode=null,chan=null;
+let uid='',email='',code=null,league=null,members=[],races=[],P={},msg='',info='',tab='gare',gview='prossimo',subCode=null,chan=null;
 const myName=()=>LS.get('fs_name')||'Tu';
 const me=()=>members.find(m=>m.uid===uid);
 const isOwner=()=>!!league&&league.owner===uid;
@@ -109,6 +112,7 @@ function predPts(m,r){
 const racePts=(m,r)=>Math.round(teamPts(m,r)+predPts(m,r));
 const total=m=>races.reduce((s,r)=>s+racePts(m,r),0);
 const skierTotal=id=>races.reduce((s,r)=>s+(skierPts(id,r)||0),0);
+const gStatus=r=>hasRes(r)?'fine':((r.d||'')<todayStr()?'da':'attesa');
 
 /* ===== Dati ===== */
 async function loadLeague(){
@@ -195,27 +199,74 @@ function joinCard(){
   return `<div class=card><h2>Entra nella lega</h2><p class=mut>Non risulti ancora tra i partecipanti.</p><button data-act=joinhere>Entra</button></div>`;
 }
 
+/* ----- Gare: ultimo/prossimo fine settimana, in arrivo, concluse ----- */
+function card(r,inner){
+  const s=gStatus(r);
+  return `<div class=card><div class=row><b>${esc(r.name)}</b><span class="badge ${s}">${SL[s]}</span></div><div class=mut>${G[r.g]||''} · ${esc(r.d||'')}</div>${inner}</div>`;
+}
+
+function resTable(r,M){
+  const mine=id=>M&&(M.players||[]).includes(id);
+  return `<table><tr><th>#</th><th>Atleta</th><th>Tempo</th><th>Punti</th></tr>`+
+    r.order.map((x,i)=>`<tr class="${mine(x.id)?'me':''}"><td>${i+1}</td><td>${FL(P[x.id]?.nat)} ${esc(x.n)}</td><td>${esc(x.t||'')}</td><td>${skierPts(x.id,r)}</td></tr>`).join('')+
+    (r.dnf||[]).map(x=>`<tr class="${mine(x.id)?'me':''}"><td>—</td><td>${esc(x.n)}</td><td>${esc(x.c)}</td><td>${RULES.malus[x.c]??RULES.malus.RIT}</td></tr>`).join('')+`</table>`;
+}
+
+function memberRank(r){
+  const rows=members.map(m=>({m,p:racePts(m,r)})).sort((a,b)=>b.p-a.p);
+  return rows.map((x,i)=>`<div class=row><span>${i+1}. ${esc(x.m.name)}</span><b>${x.p}</b></div>`).join('')||'<p class=mut>Nessun partecipante.</p>';
+}
+
+function concluded(r,M){
+  const inner=hasRes(r)
+    ? resTable(r,M)+`<h2>Classifica della gara</h2>`+memberRank(r)+(M?`<div class=mut style="margin-top:8px">La tua squadra: <b>${teamPts(M,r)}</b> · Previsione: <b>${predPts(M,r)}</b> · Totale: <b>${racePts(M,r)}</b></div>`:'')
+    : `<p class=mut>Risultati non ancora inseriti.</p>`;
+  return card(r,inner);
+}
+
+function predForm(r,M){
+  const opts=Object.values(P).filter(p=>r.g==='mista'||p.g===r.g).sort((a,b)=>a.name.localeCompare(b.name));
+  const cur=(M.pred||{})[r.id]||[];
+  return `<div class=mut style="margin-bottom:6px">Prevedi i primi 5 all’arrivo</div>`+
+    [0,1,2,3,4].map(i=>`<select id="pk-${esc(r.id)}-${i}"><option value="">${i+1}° posto</option>${opts.map(p=>`<option value="${esc(p.id)}" ${cur[i]===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select>`).join('')+
+    `<button data-act=pred data-race="${esc(r.id)}">Salva previsione</button>`;
+}
+
+function upcoming(r,M){
+  const who=members.filter(m=>(m.pred||{})[r.id]&&(m.pred[r.id]||[]).length).map(m=>m.name);
+  const inner=`<div class=mut>Partecipanti alla lega: ${members.length} · Hanno già fatto la previsione: ${esc(who.join(', ')||'nessuno')}</div>`+
+    (M?predForm(r,M):'<p class=mut>Entra nella lega per prevedere.</p>');
+  return card(r,inner);
+}
+
+function riepilogo(M){
+  if(!M) return '';
+  const ranked=members.map(m=>({m,t:total(m)})).sort((a,b)=>b.t-a.t);
+  const pos=ranked.findIndex(x=>x.m.uid===uid)+1;
+  return `<div class=card style="margin-top:14px"><h2>Il tuo riepilogo</h2>
+<div class=row><span>Posizione in classifica</span><b>${pos} / ${ranked.length}</b></div>
+<div class=row><span>Punti totali</span><b>${total(M)}</b></div>
+<div class=row><span>Atleti in squadra</span><b>${(M.players||[]).length}</b></div></div>`;
+}
+
 function gareTab(){
-  const M=me();
-  if(!races.length) return '<div class=card>Nessuna gara ancora: l’admin le aggiunge nella sezione Admin.</div>';
-  return RULES_TXT+races.map(r=>{
-    const st=r.status||'attesa';
-    let body='';
-    if(hasRes(r)){
-      const mine=id=>M&&(M.players||[]).includes(id);
-      body=`<table><tr><th>#</th><th>Atleta</th><th>Tempo</th><th>Punti</th></tr>`+
-        r.order.map((x,i)=>`<tr class="${mine(x.id)?'me':''}"><td>${i+1}</td><td>${FL(P[x.id]?.nat)} ${esc(x.n)}</td><td>${esc(x.t||'')}</td><td>${skierPts(x.id,r)}</td></tr>`).join('')+
-        (r.dnf||[]).map(x=>`<tr class="${mine(x.id)?'me':''}"><td>—</td><td>${esc(x.n)}</td><td>${esc(x.c)}</td><td>${RULES.malus[x.c]??RULES.malus.RIT}</td></tr>`).join('')+`</table>`;
-      if(M) body+=`<div class=mut style="margin-top:8px">La tua squadra: <b>${teamPts(M,r)}</b> · Previsione: <b>${predPts(M,r)}</b> · Totale gara: <b>${racePts(M,r)}</b></div>`;
-    } else if(M){
-      const opts=Object.values(P).filter(p=>r.g==='mista'||p.g===r.g).sort((a,b)=>a.name.localeCompare(b.name));
-      const cur=(M.pred||{})[r.id]||[];
-      body=`<div class=mut style="margin-bottom:6px">Prevedi i primi 5 all’arrivo</div>`+
-        [0,1,2,3,4].map(i=>`<select id="pk-${esc(r.id)}-${i}"><option value="">${i+1}° posto</option>${opts.map(p=>`<option value="${esc(p.id)}" ${cur[i]===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select>`).join('')+
-        `<button data-act=pred data-race="${esc(r.id)}">Salva previsione</button>`;
-    } else body='<span class=mut>In arrivo</span>';
-    return `<div class=card><div class=row><b>${esc(r.name)}</b><span class="badge ${st}">${SL[st]||st}</span></div><div class=mut>${G[r.g]||''} · ${esc(r.d||'')}</div>${body}</div>`;
-  }).join('');
+  const M=me(), today=todayStr();
+  const seg=`<div class=seg>${[['prossimo','Ultimo e prossimo'],['arrivo','In arrivo'],['concluse','Concluse']].map(([k,l])=>`<button class="${gview===k?'':'sec'}" data-gv="${k}">${l}</button>`).join('')}</div>`;
+  if(!races.length) return seg+'<div class=card>Nessuna gara ancora: l’admin le aggiunge nella sezione Admin.</div>'+riepilogo(M);
+  let h=seg;
+  if(gview==='prossimo'){
+    const last=races.filter(r=>r.d>=addDays(today,-7)&&r.d<=today).sort((a,b)=>String(b.d).localeCompare(String(a.d)));
+    const next=races.filter(r=>r.d>today&&r.d<=addDays(today,7)).sort((a,b)=>String(a.d).localeCompare(String(b.d)));
+    h+=`<h2>Ultimo fine settimana</h2>`+(last.length?last.map(r=>concluded(r,M)).join(''):'<div class=card>Nessuna gara nell’ultimo fine settimana.</div>');
+    h+=`<h2>Prossimo fine settimana</h2>`+(next.length?next.map(r=>upcoming(r,M)).join(''):'<div class=card>Nessuna gara nel prossimo fine settimana.</div>');
+  } else if(gview==='arrivo'){
+    const list=races.filter(r=>!hasRes(r)&&r.d>=today).sort((a,b)=>String(a.d).localeCompare(String(b.d)));
+    h+=list.length?list.map(r=>upcoming(r,M)).join(''):'<div class=card>Nessuna gara in arrivo.</div>';
+  } else {
+    const list=races.filter(r=>hasRes(r)||r.d<today).sort((a,b)=>String(b.d).localeCompare(String(a.d)));
+    h+=list.length?list.map(r=>concluded(r,M)).join(''):'<div class=card>Nessuna gara conclusa.</div>';
+  }
+  return h+riepilogo(M);
 }
 
 function squadraTab(){
@@ -256,11 +307,11 @@ function adminTab(){
   const pt=(league.pool||[]).map(p=>`${p.name};${p.g};${p.nat||''};${p.spec||''};${p.tier};${p.price}`).join('\n');
   let h=`<div class=card><h2>Listone</h2><p class=mut>Una riga per atleta: Nome;M o F;Nazione (es. IT);Specialità (es. GS SL);fascia (top, semi o pippe);prezzo consigliato</p><textarea id=pool rows=10>${esc(pt)}</textarea><button data-act=savepool>Salva listone</button></div>`;
   h+=`<div class=card><h2>Aggiorna notizie</h2><p class=mut>Una notizia per riga: data (AAAA-MM-GG) | testo | link facoltativo</p><textarea id=nb rows=4></textarea><button data-act=newsbatch>Aggiorna notizie</button></div>`;
-  h+=`<div class=card><h2>Nuova gara</h2><input id=rn placeholder="Es. Gigante Sölden M"><select id=rg><option value=M>Uomini</option><option value=F>Donne</option><option value=mista>Mista</option></select><button data-act=addrace>Aggiungi gara</button></div>`;
+  h+=`<div class=card><h2>Nuova gara</h2><input id=rn placeholder="Es. Gigante Sölden M"><input id=rd type=date><select id=rg><option value=M>Uomini</option><option value=F>Donne</option><option value=mista>Mista</option></select><button data-act=addrace>Aggiungi gara</button></div>`;
   h+=races.map(r=>{
     const t=(r.order||[]).map(x=>`${x.n};${x.t||''}`).join('\n');
     const dn=(r.dnf||[]).map(x=>`${x.n};${x.c}`).join('\n');
-    return `<div class=card><div class=row><b>${esc(r.name)}</b><select id="st-${esc(r.id)}">${Object.entries(SL).map(([k,l])=>`<option value=${k} ${(r.status||'attesa')===k?'selected':''}>${l}</option>`).join('')}</select></div>
+    return `<div class=card><div class=row><b>${esc(r.name)} · ${esc(r.d||'')}</b></div>
 <div class=mut>Un atleta per riga, in ordine d’arrivo: Nome;tempo</div><textarea id="res-${esc(r.id)}" rows=6>${esc(t)}</textarea>
 <div class=mut>Ritirati o squalificati: Nome;RIT, SQ o DNS</div><textarea id="dnf-${esc(r.id)}" rows=2>${esc(dn)}</textarea>
 <button data-act=results data-race="${esc(r.id)}">Calcola e carica risultato</button></div>`;
@@ -317,7 +368,7 @@ async function act(a,ds){
     const e=$('em').value.trim(), p=$('pw').value;
     if(!e||p.length<6) throw new Error('Scrivi e-mail e una password di almeno 6 caratteri');
     const r=ok(await sb.auth.signUp({email:e,password:p}));
-    if(!r.data.session) info='Account creato. Ora tocca Accedi.';
+    if(!r.data.session) info='Account creato. Controlla la posta e apri il link di conferma.';
     return;
   }
   if(a==='logout'){ await sb.auth.signOut(); LS.del('fs_code'); return; }
@@ -342,6 +393,8 @@ async function act(a,ds){
   if(a==='pred'){
     const M=me(); if(!M) throw new Error('Entra nella lega prima');
     const r=ds.race;
+    const rr=races.find(x=>x.id===r);
+    if(rr&&(hasRes(rr)||rr.d<todayStr())) throw new Error('Previsioni chiuse per questa gara');
     const sel=[0,1,2,3,4].map(i=>$(`pk-${r}-${i}`)?.value).filter(Boolean);
     if(sel.length<5) throw new Error('Scegli 5 atleti');
     if(new Set(sel).size<5) throw new Error('Scegli 5 atleti diversi');
@@ -361,25 +414,27 @@ async function act(a,ds){
     $('nb').value=''; return;
   }
   if(a==='addrace'){
-    const n=$('rn').value.trim(); if(!n) throw new Error('Scrivi il nome della gara');
+    const n=$('rn').value.trim(), d=$('rd').value; if(!n) throw new Error('Scrivi il nome della gara');
+    if(!d) throw new Error('Scegli la data della gara');
     const id=slug(n);
     if(races.some(r=>r.id===id)) throw new Error('Gara già presente');
-    ok(await sb.from('races').insert({league_code:code,id,name:n,d:new Date().toISOString().slice(0,10),g:$('rg').value,status:'attesa',result:[],dnf:[]}));
-    $('rn').value=''; return;
+    ok(await sb.from('races').insert({league_code:code,id,name:n,d,g:$('rg').value,status:'attesa',result:[],dnf:[]}));
+    $('rn').value=''; $('rd').value=''; return;
   }
   if(a==='results'){
     const r=races.find(x=>x.id===ds.race); if(!r) throw new Error('Gara non trovata');
-    const status=$('st-'+r.id).value;
     const order=lines($('res-'+r.id).value).map(l=>{const [n,t]=l.split(';').map(x=>(x||'').trim()); return {id:idOf(n,r.g),n,t:t||''};});
     if(new Set(order.map(x=>x.id)).size!==order.length) throw new Error('Atleta inserito due volte');
     const dnf=lines($('dnf-'+r.id).value).map(l=>{const [n,c]=l.split(';').map(x=>(x||'').trim()); return {id:idOf(n,r.g),n,c:(c||'RIT').toUpperCase()};});
-    ok(await sb.from('races').update({result:order,dnf,status}).eq('league_code',code).eq('id',r.id));
+    ok(await sb.from('races').update({result:order,dnf,status:order.length?'fine':'attesa'}).eq('league_code',code).eq('id',r.id));
     info='Risultato caricato: punti ricalcolati per tutti.';
     return;
   }
 }
 
 document.addEventListener('click',async e=>{
+  const g=e.target.closest('[data-gv]');
+  if(g){ gview=g.dataset.gv; render(); return; }
   const t=e.target.closest('[data-tab]');
   if(t){ tab=t.dataset.tab; render(); return; }
   const b=e.target.closest('[data-act]');
